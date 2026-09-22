@@ -42,13 +42,56 @@ try{
   await page.waitForFunction(()=>Number(document.querySelector('.temple-journey').dataset.progress)<.002);
   await page.keyboard.press('PageDown');await page.waitForTimeout(800);assert.ok(await page.evaluate(()=>scrollY>0));
   await page.setViewportSize({width:844,height:390});await scrollToProgress(page,.88);await page.screenshot({path:`artifacts/screenshots/${viewport.name}-landscape.png`});
-  await page.getByRole('link',{name:'Museum',exact:true}).click();await page.waitForSelector('.m-hero');assert.equal(await page.locator('canvas').count(),0);
+  // The museum is no longer linked from the navbar, but the route still works.
+  assert.equal(await page.getByRole('link',{name:'Museum'}).count(),0,'Museum must not appear in the navbar');
+  await page.goto(`${base}/modern`,{waitUntil:'networkidle'});await page.waitForSelector('.m-hero');assert.equal(await page.locator('canvas').count(),0);
   await page.screenshot({path:`artifacts/screenshots/${viewport.name}-museum.png`});
   await page.getByRole('link',{name:'Temple',exact:true}).click();await page.waitForSelector('.temple-journey[data-ready="true"]');
   await page.evaluate(()=>{document.querySelector('canvas').dispatchEvent(new Event('webglcontextlost',{cancelable:true}));});
   await page.waitForSelector('.temple-static');assert.equal(await page.locator('.temple-static article').count(),3);
   await page.close();
  }
+ // The couple's track. It must not be fetched until a guest asks for sound, it
+ // must loop, it must survive switching invitations, and muting must stop it.
+ {
+  const page=await browser.newPage({viewport:{width:1440,height:1000}});
+  page.on('pageerror',e=>errors.push(`music: ${e.message}`));
+  const fetched=[];
+  page.on('request',r=>{if(/assets\/audio\//.test(r.url()))fetched.push(r.url().split('/').pop());});
+  await page.addInitScript(()=>{const O=window.Audio;window.Audio=function(...a){const el=new O(...a);window.__audio=el;return el;};});
+  const read=()=>page.evaluate(()=>{const a=window.__audio;return a?{paused:a.paused,loop:a.loop,time:a.currentTime,src:(a.currentSrc||'').split('/').pop()}:null;});
+
+  await page.goto(`${base}/wedding`,{waitUntil:'networkidle'});
+  assert.equal(fetched.length,0,'audio must not be downloaded before a guest asks for sound');
+
+  await page.getByRole('button',{name:'Play ambience'}).click();
+  await page.waitForFunction(()=>window.__audio&&!window.__audio.paused,null,{timeout:15000});
+  await page.waitForTimeout(900);
+  const playing=await read();
+  assert.ok(playing.loop,'the track must loop');
+  assert.equal(await page.getByRole('button',{name:'Mute ambience'}).getAttribute('aria-pressed'),'true');
+  assert.equal(fetched.length,1,'exactly one audio file should be fetched');
+
+  // Switching invitations must not restart or silence it.
+  await page.getByRole('link',{name:'Temple',exact:true}).click();
+  await page.waitForSelector('.temple-journey');
+  await page.waitForTimeout(800);
+  const afterNav=await read();
+  assert.ok(!afterNav.paused,'music must survive a route change');
+  assert.ok(afterNav.time>playing.time,'music must keep playing across a route change');
+  assert.equal(await page.getByRole('button',{name:'Mute ambience'}).getAttribute('aria-pressed'),'true','the control must still read as unmuted after navigating');
+
+  // It wraps rather than stopping at the end.
+  const wrapped=await page.evaluate(async()=>{const a=window.__audio;a.currentTime=a.duration-1.0;const before=a.currentTime;await new Promise(r=>setTimeout(r,2500));return{before,after:a.currentTime,paused:a.paused,ended:a.ended};});
+  assert.ok(wrapped.after<wrapped.before&&!wrapped.paused&&!wrapped.ended,'the track must loop back to the start rather than ending');
+
+  await page.getByRole('button',{name:'Mute ambience'}).click();
+  await page.waitForFunction(()=>window.__audio&&window.__audio.paused,null,{timeout:8000});
+  assert.equal(await page.getByRole('button',{name:'Play ambience'}).getAttribute('aria-pressed'),'false');
+  assert.equal(fetched.length,1,'muting and unmuting must not refetch the audio');
+  await page.close();
+ }
+
  // RSVP delivery. The endpoint is stubbed, so the real spreadsheet is never
  // touched, but the request itself is checked: method, the content type that
  // keeps it a CORS simple request, the honeypot, and which invitation it came
@@ -119,6 +162,6 @@ try{
  const unsupported=await browser.newPage();await unsupported.addInitScript(()=>{const original=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return type.includes('webgl')?null:original.call(this,type,...args);};});
  await unsupported.goto(`${base}/traditional`);await unsupported.waitForSelector('.temple-static');await unsupported.getByRole('button',{name:'View invitation'}).click();assert.equal(await unsupported.evaluate(()=>document.activeElement.id),'invitation');await unsupported.close();
  assert.deepEqual(errors,[]);
- await writeFile('artifacts/temple-validation.json',JSON.stringify({base,report,errors,checks:['seven chapters','reverse/fast scroll','sticky positioning','Tamil','audio toggle','skip/focus','offscreen pause','RSVP','replay','keyboard','resize','Museum','route re-entry','context loss','reduced motion','WebGL unavailable','classic /wedding route','classic route uses no WebGL','nav round trip','RSVP delivery on all three routes','RSVP failure surfaces an error']},null,2));
+ await writeFile('artifacts/temple-validation.json',JSON.stringify({base,report,errors,checks:['seven chapters','reverse/fast scroll','sticky positioning','Tamil','audio toggle','skip/focus','offscreen pause','RSVP','replay','keyboard','resize','museum route reachable but unlisted','route re-entry','context loss','reduced motion','WebGL unavailable','classic /wedding route','classic route uses no WebGL','nav round trip','RSVP delivery on all three routes','RSVP failure surfaces an error','music loops, is lazy, and survives navigation','muting stops playback']},null,2));
  console.log(JSON.stringify(report,null,2));console.log('All temple journey browser checks passed.');
 }finally{await browser.close();}

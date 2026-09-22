@@ -74,6 +74,7 @@ Triplanar projection makes the grain the same real-world size everywhere.
 | --- | --- | --- |
 | `assets-src/temple-*.png`, `museum-gallery.png`, `couple-turnaround.png` | AI-generated renders supplied with the project | project-owned |
 | `assets-src/couple-photo.jpeg` | Photograph of Mohan and Nandhini | private, see below |
+| `assets-src/mohanwedding.mp3` | The couple's own track, 320kbps master | project-owned |
 | `public/assets/pbr/granite-*` | Poly Haven `granite_tile_03` | CC0 |
 | `public/assets/pbr/marble-*` | Poly Haven `marble_01` | CC0 |
 | `public/assets/env/temple-env.hdr` | Poly Haven `afrikaans_church_interior` | CC0 |
@@ -95,12 +96,30 @@ decision. If the repository is public, the full-resolution original is
 downloadable from it — remove `assets-src/couple-photo.jpeg` from version
 control if only the cropped, served copy should be public.
 
+## Music
+
+The couple's track loops under all three invitations, controlled by the speaker
+button in the header. Nothing is downloaded until a guest actually asks for
+sound, so the audio is free for everyone who never presses it.
+
+The 320kbps master is re-encoded to two web versions by `npm run build-audio`:
+Ogg Opus at 72kbps (1.4MB) for browsers that support it, and MP3 at 112kbps
+(2.1MB) as the Safari fallback — down from 6.1MB. The track has no silence at
+either end, so it loops tightly; `scripts/visual-check.mjs` asserts that it
+actually wraps rather than stopping, on both codecs.
+
+The shell that owns the player sits *above* the router, so switching invitation
+does not restart the music, reset the language, or re-download anything. If the
+browser refuses to play, the control falls back to showing itself as muted
+rather than claiming to be playing.
+
 ## Commands
 
 ```
 npm run dev            # develop
 npm run build          # production build
 npm run build-assets   # regenerate every derived asset (needs network on first run)
+npm run build-audio    # re-encode the music from the master in assets-src/
 npm test               # camera-path and plate invariants
 npm run visual-check   # full browser suite against a running preview
 npm run shoot          # screenshot every chapter: npm run shoot -- <url> [mobile]

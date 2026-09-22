@@ -8,7 +8,8 @@
  *   npm run build-assets
  *
  * Source images live in assets-src/ and are never served: they are 13MB of PNG.
- * Outputs land in public/assets/{plates,pbr,couple,generated} and are committed.
+ * Outputs land in public/assets/{plates,pbr,couple,generated,audio} and are
+ * committed. The audio is encoded separately; see `npm run build-audio`.
  *
  * The parallax plates are cut with purely geometric feathered masks, never a
  * colour-keyed matte. The full image is always kept as the rearmost layer, so
