@@ -32,6 +32,12 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          # The Apps Script Web App URL that receives RSVPs. Set it as a repo
+          # secret named RSVP_ENDPOINT. It is not a credential and ends up
+          # visible in the published bundle either way; keeping it here simply
+          # makes it easy to rotate without touching the source.
+          VITE_RSVP_ENDPOINT: ${{ secrets.RSVP_ENDPOINT }}
 
       - name: Add SPA fallback
         run: |

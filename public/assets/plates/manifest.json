@@ -1,0 +1,59 @@
+{
+  "plates": {
+    "exterior": {
+      "aspect": 1.7768331562167907,
+      "average": [
+        153,
+        107,
+        71
+      ],
+      "layers": [
+        {
+          "id": "far",
+          "file": "assets/plates/exterior-far.webp"
+        },
+        {
+          "id": "near",
+          "file": "assets/plates/exterior-near.webp"
+        }
+      ]
+    },
+    "corridor": {
+      "aspect": 1.7768331562167907,
+      "average": [
+        104,
+        67,
+        39
+      ],
+      "layers": [
+        {
+          "id": "far",
+          "file": "assets/plates/corridor-far.webp"
+        },
+        {
+          "id": "near",
+          "file": "assets/plates/corridor-near.webp"
+        }
+      ]
+    },
+    "ceremony": {
+      "aspect": 1.7768331562167907,
+      "average": [
+        170,
+        112,
+        69
+      ],
+      "layers": [
+        {
+          "id": "far",
+          "file": "assets/plates/ceremony-far.webp"
+        },
+        {
+          "id": "near",
+          "file": "assets/plates/ceremony-near.webp"
+        }
+      ]
+    }
+  },
+  "generatedAt": "2026-09-22T20:48:29.006Z"
+}

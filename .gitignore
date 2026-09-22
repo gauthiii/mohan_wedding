@@ -2,6 +2,6 @@ node_modules/
 dist/
 artifacts/
 .DS_Store
-bg.jpeg
+.asset-cache/
 *.log
 
