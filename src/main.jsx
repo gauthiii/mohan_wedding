@@ -10,7 +10,7 @@ import '@fontsource/dm-sans/400.css';
 import '@fontsource/dm-sans/500.css';
 import '@fontsource/noto-sans-tamil/400.css';
 import '@fontsource/noto-sans-tamil/500.css';
-import './styles.css';
+import './styles.css'; 
 
 const ASSET = `${import.meta.env.BASE_URL}assets/generated/`;
 const UI = createContext(null);
