@@ -42,6 +42,13 @@ for (const [name, p] of points) {
   await page.waitForFunction(v => Math.abs(Number(document.querySelector('.temple-journey')?.dataset.progress) - v) < 0.003, p, { timeout: 15000 });
   await page.waitForTimeout(700);
   await page.screenshot({ path: `artifacts/shots/${which}-${name}.png` });
+  if (which === 'desktop' && name === '03-portrait') {
+    await page.locator('.portrait-hit').hover();
+    await page.waitForTimeout(750);
+    await page.screenshot({ path: 'artifacts/shots/desktop-03-portrait-active.png' });
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(750);
+  }
 }
 
 const stats = await page.locator('.temple-journey').evaluate(el => ({ ...el.dataset }));

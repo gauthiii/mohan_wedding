@@ -22,11 +22,45 @@ try{
    await page.screenshot({path:`artifacts/screenshots/${viewport.name}-${name}.png`});
    assert.equal(await page.locator('.temple-stage').evaluate(el=>Math.round(el.getBoundingClientRect().top)),0,'scene must stay pinned');
   }
+  assert.equal(await page.locator('.journey-shade').count(),0,'the full-screen black shade must not exist');
+  assert.equal(await page.locator('.journey-transition').count(),0,'a transition veil must not cover settled chapters');
+  assert.ok(await page.locator('.temple-journey').evaluate(el=>el.offsetHeight/innerHeight>11.9),'journey must span 1200svh');
+
+  // The portrait is a semantic DOM target projected onto the 3D frame. It
+  // centres without hiding either edge, reveals both labels, and restores.
+  await scrollToProgress(page,.4);await page.waitForTimeout(500);
+  const portrait=page.locator('.portrait-hit');
+  const restBox=await portrait.boundingBox();
+  assert.ok(restBox&&restBox.width>30&&restBox.height>60,`${viewport.name}: portrait target missing`);
+  if(viewport.name==='desktop')await portrait.hover();
+  else await portrait.dispatchEvent('pointerdown',{pointerType:'touch',pointerId:7,isPrimary:true});
+  await page.waitForFunction(()=>document.querySelector('.temple-journey')?.classList.contains('portrait-active'));
+  await page.waitForTimeout(750);
+  const activeBox=await portrait.boundingBox();
+  assert.ok(activeBox,`${viewport.name}: active portrait target missing`);
+  assert.ok(Math.abs(activeBox.x+activeBox.width/2-viewport.width/2)<10,`${viewport.name}: portrait did not centre`);
+  assert.ok(activeBox.x>=-1&&activeBox.x+activeBox.width<=viewport.width+1,`${viewport.name}: centred portrait is clipped`);
+  assert.ok(activeBox.height/restBox.height>1.06,`${viewport.name}: portrait did not enlarge`);
+  assert.ok(+await page.locator('.journey-caption').evaluate(el=>getComputedStyle(el).opacity)<.1,'caption must fade behind active portrait');
+  for(const callout of await page.locator('.portrait-callout').all()){
+   const box=await callout.boundingBox();
+   assert.ok(box&&box.x>=0&&box.x+box.width<=viewport.width,`${viewport.name}: portrait callout is out of bounds`);
+   assert.ok(+await callout.evaluate(el=>getComputedStyle(el).opacity)>.9,'portrait callout must be visible');
+  }
+  if(viewport.name==='desktop')await page.mouse.move(5,5);
+  else await page.locator('.temple-stage').dispatchEvent('pointerdown',{pointerType:'touch',pointerId:8,isPrimary:true});
+  await page.waitForFunction(()=>!document.querySelector('.temple-journey')?.classList.contains('portrait-active'));
+  await portrait.focus();await page.waitForFunction(()=>document.querySelector('.temple-journey')?.classList.contains('portrait-active'));
+  await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('.temple-journey')?.classList.contains('portrait-active'));
   report.push({viewport:viewport.name,...await page.locator('.temple-journey').evaluate(el=>({...el.dataset}))});
   // Reverse and fast scrolling must converge to the requested view.
   await scrollToProgress(page,.2);await scrollToProgress(page,.93);await scrollToProgress(page,.4);
   await page.getByRole('button',{name:'Switch language'}).click();
   assert.ok((await page.locator('.journey-caption').innerText()).includes('மோகன்'));
+  await portrait.focus();
+  await page.waitForFunction(()=>document.querySelector('.temple-journey')?.classList.contains('portrait-active'));
+  assert.deepEqual(await page.locator('.portrait-callout').allTextContents(),['நந்தினி','மோகன்']);
+  await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'Switch language'}).click();
   await page.getByRole('button',{name:'Play ambience'}).click();
   assert.equal(await page.getByRole('button',{name:'Mute ambience'}).getAttribute('aria-pressed'),'true');

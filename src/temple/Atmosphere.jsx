@@ -21,6 +21,7 @@ void main() {
 const FLAME_FRAGMENT = `
 varying vec2 vUv;
 uniform float time;
+uniform float reveal;
 void main() {
   float y = vUv.y;
   float sway = sin(y * 8.0 - time * 4.6) * 0.055 * y + sin(y * 17.0 - time * 7.3) * 0.022 * y;
@@ -32,20 +33,20 @@ void main() {
   float core = 1.0 - smoothstep(0.0, width * 0.5, abs(x));
   vec3 colour = mix(vec3(0.95, 0.12, 0.0), vec3(1.0, 0.55, 0.06), flame * (1.0 - y * 0.55));
   colour = mix(colour, vec3(1.0, 0.85, 0.42), core * (1.0 - y) * 0.42);
-  gl_FragColor = vec4(colour, flame * base * tip * 0.95);
+  gl_FragColor = vec4(colour, flame * base * tip * 0.95 * reveal);
 }`;
 
-export function Fire({ position = [0, 0, 0], progress }) {
+export function Fire({ position = [0, 0, 0], progress, scale = 1 }) {
   const flames = useRef(), embers = useRef(), smoke = useRef(), light = useRef(), group = useRef();
   const dummy = useMemo(() => new THREE.Object3D(), []);
-  const uniforms = useMemo(() => [0, 1, 2, 3, 4].map(() => ({ time: { value: 0 } })), []);
+  const uniforms = useMemo(() => [0, 1, 2, 3, 4].map(() => ({ time: { value: 0 }, reveal: { value: 1 } })), []);
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
     // The fire only exists once the ceremony plate is on screen behind it.
-    const reveal = ramp(progress.current, 0.6, 0.74);
+    const reveal = ramp(progress.current, 0.7, 0.82);
     if (group.current) group.current.visible = reveal > 0.01;
-    if (group.current) group.current.scale.setScalar(0.4 + reveal * 0.6);
+    if (group.current) group.current.scale.setScalar((0.4 + reveal * 0.6) * scale);
     if (reveal <= 0.01) return;
 
     uniforms.forEach((u, i) => { u.time.value = t + i * 1.7; });
@@ -80,7 +81,9 @@ export function Fire({ position = [0, 0, 0], progress }) {
               transparent
               depthWrite={false}
               side={THREE.DoubleSide}
-              blending={THREE.AdditiveBlending}
+              // Painted, not added: the fire burns in front of a bright
+              // photograph, and an additive flame vanishes against white.
+              blending={THREE.NormalBlending}
               toneMapped={false}
               uniforms={uniforms[i]}
               vertexShader={FLAME_VERTEX}
@@ -110,8 +113,8 @@ export function Petals({ count = 90 }) {
   const ref = useRef();
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const seeds = useMemo(() => Array.from({ length: count }, (_, i) => ({
-    x: (Math.random() - 0.5) * 14,
-    z: -Math.random() * 50 + 2,
+    x: (Math.random() - 0.5) * 10,
+    z: 10 - Math.random() * 30,
     speed: 0.32 + Math.random() * 0.4,
     phase: Math.random() * Math.PI * 2,
     spin: (Math.random() - 0.5) * 1.6,
@@ -146,9 +149,9 @@ export function Dust({ count = 220 }) {
   const geometry = useMemo(() => {
     const positions = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 15;
+      positions[i * 3] = (Math.random() - 0.5) * 10;
       positions[i * 3 + 1] = Math.random() * 6 + 0.4;
-      positions[i * 3 + 2] = -Math.random() * 46 + 1;
+      positions[i * 3 + 2] = 10 - Math.random() * 30;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -161,5 +164,35 @@ export function Dust({ count = 220 }) {
     <points ref={ref} geometry={geometry} frustumCulled={false}>
       <pointsMaterial size={0.026} color="#ffdfa8" transparent opacity={0.34} sizeAttenuation depthWrite={false} toneMapped={false} />
     </points>
+  );
+}
+
+/**
+ * One flame, always facing the camera, with an optional flickering light. The
+ * corridor puts one of these on every lamp the photograph painted, so the
+ * picture's lamps burn instead of merely glowing.
+ */
+export function Flame({ position, size = 0.25, light = null, phase = 0, reveal }) {
+  const mesh = useRef(), lamp = useRef();
+  const uniforms = useMemo(() => ({ time: { value: phase }, reveal: { value: 1 } }), [phase]);
+  useFrame(({ clock, camera }) => {
+    const t = clock.elapsedTime + phase;
+    uniforms.time.value = t;
+    const r = reveal ? reveal.current : 1;
+    uniforms.reveal.value = r;
+    if (mesh.current) {
+      mesh.current.quaternion.copy(camera.quaternion);
+      mesh.current.scale.set(1, 0.92 + Math.sin(t * 6.3) * 0.08 + Math.sin(t * 11.7) * 0.04, 1);
+    }
+    if (lamp.current && light) lamp.current.intensity = light.intensity * r * (0.86 + Math.sin(t * 7.1) * 0.09 + Math.sin(t * 12.9) * 0.05);
+  });
+  return (
+    <group position={position}>
+      <mesh ref={mesh} position={[0, size * 0.55, 0]}>
+        <planeGeometry args={[size * 0.75, size * 1.5]} />
+        <shaderMaterial transparent depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} uniforms={uniforms} vertexShader={FLAME_VERTEX} fragmentShader={FLAME_FRAGMENT} />
+      </mesh>
+      {light && <pointLight ref={lamp} position={[0, size * 0.8, 0]} color={light.color} intensity={light.intensity} distance={light.distance} decay={2} />}
+    </group>
   );
 }

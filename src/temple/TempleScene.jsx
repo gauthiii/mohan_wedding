@@ -1,30 +1,28 @@
 import React, { Suspense, useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { EffectComposer, Bloom, DepthOfField, Vignette, Noise, ToneMapping } from '@react-three/postprocessing';
-import { BlendFunction, ToneMappingMode } from 'postprocessing';
 import * as THREE from 'three';
 import { sampleJourney, plateOpacity } from './cameraPath';
 import { plates } from './plates';
 import { useAssets, resetAssets } from './useAssets';
-import Architecture from './Architecture';
+import { COVER_Z } from './projection';
+import Corridor from './Corridor';
 import Plate from './Plate';
 import Portrait from './Portrait';
 import { Fire, Petals, Dust } from './Atmosphere';
 
 /**
  * Quality tiers. A phone gets the same composition and the same photoreal
- * plates, with the costly parts (shadow maps, depth of field, extra lights)
- * traded away rather than the look.
+ * corridor, with costly extras (additional lights, particles, and a finer
+ * projection mesh) traded away rather than the look.
  */
 function qualityFor(width, height) {
   const portrait = width < height;
   const small = Math.min(width, height) < 700;
   return {
     portrait,
-    shadows: !small,
-    dof: !small,
-    lampLightEvery: small ? 6 : 3,
-    garlandBeads: small ? 34 : 64,
+    fullLighting: !small,
+    corridorColumns: small ? 140 : 240,
+    corridorRows: small ? 80 : 136,
     petals: small ? 40 : 90,
     dust: small ? 90 : 220,
     dpr: small ? 1.3 : 1.65,
@@ -35,7 +33,7 @@ function qualityFor(width, height) {
 function CameraRig({ targetProgress, progress, onProgress, quality }) {
   const point = useMemo(() => new THREE.Vector3(), []);
   const look = useMemo(() => new THREE.Vector3(), []);
-  const { camera, size } = useThree();
+  const { camera } = useThree();
   const count = useRef(0);
   const timing = useRef({ frames: 0, time: 0 });
 
@@ -64,103 +62,70 @@ function CameraRig({ targetProgress, progress, onProgress, quality }) {
   return null;
 }
 
-/**
- * Keeps the focal plane on whatever the camera is looking at, in world units.
- * The focus range is kept wide on purpose: this is a long lens looking down an
- * aisle, not a macro shot, and heavy bokeh reads as mush rather than depth.
- */
-function Focus({ progress, dofRef }) {
-  useFrame(() => {
-    const material = dofRef.current?.circleOfConfusionMaterial;
-    if (!material) return;
-    const p = progress.current;
-    // Metres ahead of the camera: the far end of the aisle early on, then the
-    // couple once the ceremony plate is in frame.
-    const distance = p < 0.6 ? 26 : THREE.MathUtils.lerp(26, 11, Math.min(1, (p - 0.6) / 0.32));
-    material.worldFocusDistance = distance;
-    material.worldFocusRange = distance * 0.85;
-  });
-  return null;
-}
-
-function Scene({ targetProgress, onProgress, onReady, quality }) {
+function Scene({ targetProgress, onProgress, onReady, quality, portraitActive, portraitOverlayRef }) {
   const { gl, scene } = useThree();
   const assets = useAssets(gl);
   const progress = useRef(targetProgress.current);
-  const dofRef = useRef();
 
   useEffect(() => {
     scene.environment = assets.envMap;
-    scene.environmentIntensity = 0.95;
+    scene.environmentIntensity = 0.55;
     onReady();
   }, [assets, scene, onReady]);
 
   return (
     <>
-      {/* Graded to the plates: rgb(153,107,71) outside warming to rgb(170,112,69)
-          at the mandapam, so the built set and the photographs agree. */}
-      <color attach="background" args={['#57402c']} />
-      <fog attach="fog" args={['#7a5a3c', 20, 82]} />
-      <ambientLight intensity={0.42} color="#ffdfb4" />
-      <hemisphereLight args={['#fff0d2', '#6b503c', 0.85]} />
-      <directionalLight
-        position={[7, 17, 12]}
-        intensity={3.1}
-        color="#ffdcae"
-        castShadow={quality.shadows}
-        shadow-mapSize={[1024, 1024]}
-        shadow-camera-left={-16} shadow-camera-right={16}
-        shadow-camera-top={16} shadow-camera-bottom={-16}
-        shadow-camera-far={70}
-        shadow-bias={-0.0012}
-      />
-      {/* Warm fill at the far end so the built colonnade meets the plate evenly. */}
-      <pointLight position={[0, 4.2, -38]} color="#ffd6a6" intensity={48} distance={19} decay={2} />
-      <pointLight position={[0, 4, -49]} color="#ffca94" intensity={38} distance={20} decay={2} />
-      <pointLight position={[0, 3.4, -24]} color="#ffcf9a" intensity={30} distance={18} decay={2} />
-      <pointLight position={[0, 3.4, -10]} color="#ffcf9a" intensity={26} distance={18} decay={2} />
+      {/* Low-key, like the render: the dark is real dark, and what light there
+          is comes from the flames and the golden glow at the end of the aisle. */}
+      <color attach="background" args={['#24150f']} />
+      <fog attach="fog" args={['#2a1a10', 14, 42]} />
+      <ambientLight intensity={0.16} color="#ffd9b0" />
+      <hemisphereLight args={['#ffe2bf', '#2a1a10', 0.3]} />
+      {/* The pavilion's glow, rimming everything that hangs in the aisle from behind. */}
+      <pointLight position={[0, 4, COVER_Z - 26]} color="#ffc47a" intensity={170} distance={44} decay={2} />
 
-      <Architecture assets={assets} progress={progress} quality={quality} />
-      <Portrait assets={assets} />
+      <Corridor assets={assets} progress={progress} quality={quality} />
+      {/* Beside the aisle between the near lamps; a phone's narrow frame needs it nearer the centre line. */}
+      <Portrait
+        assets={assets}
+        progress={progress}
+        active={portraitActive}
+        overlayRef={portraitOverlayRef}
+        position={quality.portrait ? [-0.72, 0, 4.8] : [-1.9, 0, 4.2]}
+        rotation={0.55}
+        restScale={quality.portrait ? 0.68 : 1}
+      />
       {plates.map(plate => (
         <Plate key={plate.name} plate={plate} assets={assets} opacity={plateOpacity[plate.name]} progress={progress} />
       ))}
-      <Fire position={[0, 0.32, -43]} progress={progress} />
+      {/* The homa fire burns in the foreground of the ceremony, between the couple. */}
+      <Fire position={[0, 0.05, -13.3]} progress={progress} scale={0.9} />
       <Petals count={quality.petals} />
       <Dust count={quality.dust} />
 
       <CameraRig targetProgress={targetProgress} progress={progress} onProgress={onProgress} quality={quality} />
-      <Focus progress={progress} dofRef={dofRef} />
-
-      <EffectComposer multisampling={quality.shadows ? 4 : 0} enableNormalPass={false}>
-        <Bloom mipmapBlur intensity={0.72} luminanceThreshold={0.62} luminanceSmoothing={0.28} radius={0.72} />
-        {quality.dof ? (
-          <DepthOfField ref={dofRef} worldFocusDistance={26} worldFocusRange={22} bokehScale={1.5} height={480} />
-        ) : <></>}
-        <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-        <Vignette offset={0.3} darkness={0.62} blendFunction={BlendFunction.NORMAL} />
-        <Noise premultiply blendFunction={BlendFunction.SCREEN} opacity={0.1} />
-      </EffectComposer>
     </>
   );
 }
 
-export default function TempleScene({ targetProgress, onProgress, onReady, onFailure, active }) {
+export default function TempleScene({ targetProgress, onProgress, onReady, onFailure, active, portraitActive, portraitOverlayRef }) {
   const cleanup = useRef(() => {});
   const quality = useMemo(() => qualityFor(window.innerWidth, window.innerHeight), []);
   useEffect(() => () => { cleanup.current(); resetAssets(); }, []);
 
   return (
     <Canvas
-      shadows={quality.shadows ? { type: THREE.PCFSoftShadowMap } : false}
+      shadows={false}
       dpr={[1, quality.dpr]}
       camera={{ position: [0, 3.3, 20], fov: quality.portrait ? 68 : 54, near: 0.1, far: 130 }}
       frameloop={active ? 'always' : 'never'}
       gl={{ antialias: false, powerPreference: 'high-performance', alpha: false }}
       onCreated={({ gl }) => {
-        gl.toneMapping = THREE.NoToneMapping; // handled in the effect chain
-        // Each composer pass resets render stats; accumulate them per frame so
-        // the instrumentation the visual checks read stays meaningful.
+        // The photographic plates are already colour graded. Keeping the
+        // renderer neutral preserves their source pixels and facial detail.
+        gl.toneMapping = THREE.NoToneMapping;
+        // The camera rig samples and resets these counters once per frame so
+        // the visual checks report stable scene metrics.
         gl.info.autoReset = false;
         const lost = event => { event.preventDefault(); onFailure(); };
         gl.domElement.addEventListener('webglcontextlost', lost);
@@ -169,7 +134,7 @@ export default function TempleScene({ targetProgress, onProgress, onReady, onFai
       fallback={null}
     >
       <Suspense fallback={null}>
-        <Scene targetProgress={targetProgress} onProgress={onProgress} onReady={onReady} quality={quality} />
+        <Scene targetProgress={targetProgress} onProgress={onProgress} onReady={onReady} quality={quality} portraitActive={portraitActive} portraitOverlayRef={portraitOverlayRef} />
       </Suspense>
     </Canvas>
   );

@@ -8,6 +8,9 @@
  * `z` is the layer's world position; `coverZ` is the camera position at which
  * the layers should exactly fill the frame. Everything else is derived, so a
  * plate stays correctly framed at any field of view or aspect ratio.
+ *
+ * The corridor is not a plate. It is projected onto a box the camera walks
+ * into; see src/temple/projection.js.
  */
 const base = import.meta.env?.BASE_URL ?? "/";
 const plate = (name, id) => `${base}assets/plates/${name}-${id}.webp`;
@@ -29,50 +32,48 @@ export const plates = [
     ],
   },
   {
-    // Furthest back, so the ceremony plate cleanly occludes it as it arrives.
-    name: 'corridor',
-    order: -30,
-    coverZ: -24,
-    portraitMargin: 3.1,
-    layers: [
-      { id: 'far', url: plate('corridor', 'far'), z: -54 },
-      { id: 'near', url: plate('corridor', 'near'), z: -52 },
-    ],
-  },
-  {
-    // coverZ is the FARTHEST camera position at which this plate is visible, so
-    // it always fills the frame; any closer and the camera simply pushes in.
-    // The colonnade frames this plate all the way to the final stop, so it only
-    // has to fill the opening between the last pillars. The centre is dropped so
-    // the couple's faces land in the upper middle of the shot as the camera
-    // pushes in, rather than rising out of frame.
+    // The ceremony finishes at its cover pose, preserving the full source
+    // composition instead of pushing into a low-resolution close-up.
     name: 'ceremony',
     order: -20,
-    coverZ: -34,
-    y: -3.5,
+    // The last camera station is the cover pose. This preserves the complete
+    // source composition instead of enlarging the 1672px plate into a close-up.
+    coverZ: -3.3,
+    y: -1,
     // On a phone the caption occupies the lower third, so the couple are lifted
     // into the upper middle of the frame.
     yPortrait: 1.6,
-    portraitMargin: 2.45,
+    portraitMargin: 2.9,
     layers: [
-      { id: 'far', url: plate('ceremony', 'far'), z: -51.5 },
+      { id: 'far', url: plate('ceremony', 'far'), z: -20.8 },
       // There is deliberately no mid layer. The couple appear in the far layer
       // already, so a second layer carrying them too separates into a visible
       // double image as the camera pushes in. Only the foreground pillars, which
       // appear nowhere else, are split out.
-      { id: 'near', url: plate('ceremony', 'near'), z: -47.5 },
+      { id: 'near', url: plate('ceremony', 'near'), z: -16.8 },
     ],
   },
 ];
+
+export const corridorImage = plate('corridor', 'far');
 
 export const textures = {
   graniteDiff: `${base}assets/pbr/granite-diff.webp`,
   graniteNor: `${base}assets/pbr/granite-nor.webp`,
   graniteArm: `${base}assets/pbr/granite-arm.webp`,
-  marbleDiff: `${base}assets/pbr/marble-diff.webp`,
-  marbleNor: `${base}assets/pbr/marble-nor.webp`,
-  marbleArm: `${base}assets/pbr/marble-arm.webp`,
   portrait: `${base}assets/couple/mohan-nandhini.webp`,
+  garland: `${base}assets/dressing/garland-strip.webp`,
+  kolam: `${base}assets/dressing/kolam.webp`,
+  bananaSprite: `${base}assets/dressing/banana-plant.webp`,
+  lampSprite: `${base}assets/dressing/standing-kuthuvilakku.webp`,
+  pillarFace: `${base}assets/dressing/carved-pillar-face.webp`,
+};
+
+export const models = {
+  lantern: `${base}assets/models/brass_diya_lantern/brass_diya_lantern.gltf`,
+  banana: `${base}assets/models/banana-plant.glb`,
+  standingLamp: `${base}assets/models/standing-brass-lamp.glb`,
+  carvedPillar: `${base}assets/models/carved-temple-pillar.glb`,
 };
 
 export const environmentMap = `${base}assets/env/temple-env.hdr`;

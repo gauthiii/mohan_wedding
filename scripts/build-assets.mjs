@@ -42,18 +42,12 @@ const PLATES = [
     ],
   },
   {
+    // Projected whole onto the corridor box (src/temple/projection.js), so it
+    // has no cut layers: every pixel is placed by the projection instead.
     name: 'corridor',
     file: src('assets-src/temple-corridor.png'),
     width: 2048,
-    layers: [
-      { id: 'far', mask: null, quality: 0.82 },
-      // One-point perspective: the outer thirds are the near pillars.
-      { id: 'near', quality: 0.86, mask: [
-        { type: 'band', edge: 'left', size: 0.2, feather: 0.07 },
-        { type: 'band', edge: 'right', size: 0.2, feather: 0.07 },
-        { type: 'band', edge: 'bottom', size: 0.18, feather: 0.1 },
-      ] },
-    ],
+    layers: [{ id: 'far', mask: null, quality: 0.86 }],
   },
   {
     name: 'ceremony',
@@ -93,6 +87,23 @@ const ENVIRONMENT = {
   to: out('env', 'temple-env.hdr'),
 };
 
+/**
+ * CC0 props from Poly Haven, served as glTF with their textures shrunk to
+ * web size. Only the hanging brass lamp is used: it is the one temple object
+ * the catalogue has. There is no carved pillar, standing lamp or banana plant
+ * there, which is why the corridor is a projected photograph and not a model.
+ */
+const MODELS = [
+  {
+    name: 'brass_diya_lantern',
+    gltf: `${PH}/Models/gltf/1k/brass_diya_lantern/brass_diya_lantern_1k.gltf`,
+    bin: `${PH}/Models/gltf/8k/brass_diya_lantern/brass_diya_lantern.bin`,
+    textures: ['diff', 'nor_gl', 'arm'].map(kind => `${PH}/Models/jpg/1k/brass_diya_lantern/brass_diya_lantern_${kind}_1k.jpg`),
+    size: 512,
+    quality: 0.86,
+  },
+];
+
 /** Fetches a remote asset once and caches it under .asset-cache/. */
 const cached = async (remote) => {
   const file = path.join(CACHE, path.basename(remote));
@@ -129,6 +140,23 @@ const PORTRAIT = {
  */
 const FLATS = ['temple-exterior', 'temple-corridor', 'temple-ceremony', 'couple-turnaround', 'museum-gallery']
   .map(name => ({ from: src('assets-src', `${name}.png`), to: out('generated', `${name}.webp`), width: 1600, quality: 0.84 }));
+
+/** Transparent generated dressing, kept separate from the photographic plates. */
+const SPRITES = [
+  { name: 'banana-plant', width: 1024, quality: 0.88 },
+  { name: 'standing-kuthuvilakku', width: 1024, quality: 0.9 },
+  { name: 'garland-strip', width: 4096, quality: 0.88 },
+  { name: 'kolam', width: 2048, quality: 0.9 },
+  { name: 'carved-pillar-face', width: 1024, quality: 0.88 },
+].map(asset => ({
+  ...asset,
+  from: src('assets-src', `${asset.name}.png`),
+  to: out('dressing', `${asset.name}.webp`),
+}));
+
+/** Licence-checked, self-contained CC0 GLBs kept in assets-src/models. */
+const LOCAL_MODELS = ['banana-plant', 'standing-brass-lamp', 'carved-temple-pillar']
+  .map(name => ({ from: src('assets-src', 'models', `${name}.glb`), to: out('models', `${name}.glb`) }));
 
 const dataUrl = async (file) => {
   const buffer = await readFile(file);
@@ -283,6 +311,23 @@ try {
     console.log(`flat  ${path.basename(flat.to).padEnd(24)} ${flat.width}px ${String(kb).padStart(5)}KB`);
   }
 
+  for (const sprite of SPRITES) {
+    const url = await dataUrl(sprite.from);
+    const result = await page.evaluate(async ({ url, width, quality }) => {
+      const image = await window.loadImage(url);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = Math.round(width * (image.naturalHeight / image.naturalWidth));
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      return { data: canvas.toDataURL('image/webp', quality), height: canvas.height };
+    }, { url, width: sprite.width, quality: sprite.quality });
+    await write(sprite.to, result.data);
+    const kb = Math.round(Buffer.from(result.data.split(',')[1], 'base64').length / 1024);
+    console.log(`dress ${path.basename(sprite.to).padEnd(24)} ${sprite.width}x${result.height} ${String(kb).padStart(5)}KB`);
+  }
+
   {
     const url = await dataUrl(PORTRAIT.from);
     const data = await page.evaluate(async ({ url, crop, width, quality }) => {
@@ -308,6 +353,38 @@ try {
     await writeFile(ENVIRONMENT.to, await readFile(source));
     const kb = Math.round((await readFile(ENVIRONMENT.to)).length / 1024);
     console.log(`env   ${path.basename(ENVIRONMENT.to).padEnd(24)} 1k     ${String(kb).padStart(5)}KB`);
+  }
+
+  for (const model of MODELS) {
+    const folder = out('models', model.name);
+    await mkdir(path.join(folder, 'textures'), { recursive: true });
+    // The glTF and its binary are copied through; only the textures change.
+    await writeFile(path.join(folder, `${model.name}.gltf`), await readFile(await cached(model.gltf)));
+    await writeFile(path.join(folder, path.basename(model.bin)), await readFile(await cached(model.bin)));
+    let total = 0;
+    for (const remote of model.textures) {
+      const url = await dataUrl(await cached(remote));
+      const data = await page.evaluate(async ({ url, size, quality }) => {
+        const image = await window.loadImage(url);
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(image, 0, 0, size, size);
+        return canvas.toDataURL('image/jpeg', quality);
+      }, { url, size: model.size, quality: model.quality });
+      await write(path.join(folder, 'textures', path.basename(remote)), data);
+      total += Buffer.from(data.split(',')[1], 'base64').length;
+    }
+    const bin = (await readFile(path.join(folder, path.basename(model.bin)))).length;
+    console.log(`model ${model.name.padEnd(24)} ${model.size}px ${String(Math.round((total + bin) / 1024)).padStart(5)}KB`);
+  }
+
+  for (const model of LOCAL_MODELS) {
+    await mkdir(path.dirname(model.to), { recursive: true });
+    const data = await readFile(model.from);
+    await writeFile(model.to, data);
+    console.log(`model ${path.basename(model.to).padEnd(24)} bundled ${String(Math.round(data.length / 1024)).padStart(5)}KB`);
   }
 
   await mkdir(out('plates'), { recursive: true });

@@ -9,6 +9,10 @@ import { ASPECT } from './plates';
  *
  * Layers are drawn unlit and without tone mapping: these pixels are already a
  * finished, colour-graded photograph and must reach the screen unaltered.
+ * They are also drawn without a depth test. The corridor box's floor runs on
+ * under the ceremony plate, and the exterior plate hangs inside the box, so a
+ * plate has to paint over whatever it is covering outright; render order alone
+ * decides which is in front.
  *
  * Sizing has two modes. A `cover` plate always fills the frame, which the
  * opening needs because there is no architecture behind it to hide a gap. Every
@@ -64,7 +68,9 @@ export default function Plate({ plate, assets, opacity, progress }) {
               transparent
               opacity={0}
               depthWrite={false}
+              depthTest={false}
               toneMapped={false}
+              fog={false}
               side={THREE.FrontSide}
             />
           </mesh>

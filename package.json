@@ -11,6 +11,7 @@
     "test": "node --test scripts/journey.test.mjs",
     "record-journey": "node scripts/record-journey.mjs",
     "build-assets": "node scripts/build-assets.mjs",
+    "build-lamp-model": "node scripts/create-five-tier-lamp.mjs",
     "shoot": "node scripts/shoot.mjs",
     "build-audio": "ffmpeg -y -i assets-src/mohanwedding.mp3 -c:a libopus -b:a 72k -vbr on -application audio -ac 2 -map_metadata -1 public/assets/audio/wedding.opus && ffmpeg -y -i assets-src/mohanwedding.mp3 -c:a libmp3lame -b:a 112k -ac 2 -map_metadata -1 -id3v2_version 0 public/assets/audio/wedding.mp3"
   },
