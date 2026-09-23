@@ -51,6 +51,46 @@ try{
   await page.waitForSelector('.temple-static');assert.equal(await page.locator('.temple-static article').count(),3);
   await page.close();
  }
+ // Every caption flickers into Tamil on arrival and settles back into English,
+ // without stealing the text from a guest who is hovering it.
+ {
+  const page=await browser.newPage({viewport:{width:1440,height:1000}});
+  page.on('pageerror',e=>errors.push(`glimpse: ${e.message}`));
+  await page.goto(`${base}/traditional`,{waitUntil:'networkidle'});
+  await page.waitForSelector('.temple-journey[data-ready="true"]');
+  const caption=page.locator('.journey-caption');
+  const heading=page.locator('.journey-caption h1.bilingual');
+  const layers=()=>page.evaluate(()=>{const h=document.querySelector('.journey-caption h1.bilingual');return{en:+getComputedStyle(h.querySelector('span')).opacity,ta:+getComputedStyle(h,'::after').opacity};});
+
+  await scrollToProgress(page,.33);
+  await page.waitForFunction(()=>document.querySelector('.journey-caption')?.classList.contains('glimpse'),null,{timeout:8000});
+  // The keyframes open on English, so wait for the reveal rather than sampling
+  // the instant the class lands.
+  await page.waitForFunction(()=>{const h=document.querySelector('.journey-caption h1.bilingual');return h&&+getComputedStyle(h,'::after').opacity>.5;},null,{timeout:4000});
+  await page.waitForFunction(()=>!document.querySelector('.journey-caption')?.classList.contains('glimpse'),null,{timeout:8000});
+  await page.waitForTimeout(250);
+  const settled=await layers();
+  assert.ok(settled.en>.9&&settled.ta<.1,'the caption must settle back into English');
+
+  // Hovering must survive the glimpse ending, and still work afterwards.
+  await scrollToProgress(page,.5);
+  await heading.hover();
+  await page.waitForFunction(()=>!document.querySelector('.journey-caption')?.classList.contains('glimpse'),null,{timeout:12000});
+  await page.waitForTimeout(300);
+  const held=await layers();
+  assert.ok(held.ta>.9&&held.en<.1,'hover must keep Tamil after the glimpse ends');
+  await page.mouse.move(5,5);
+  await page.waitForTimeout(500);
+  assert.ok((await layers()).en>.9,'moving away must return to English');
+
+  // Nothing to glimpse once the whole page is Tamil.
+  await page.getByRole('button',{name:'Switch language'}).click();
+  await scrollToProgress(page,.66);
+  await page.waitForTimeout(1400);
+  assert.equal(await caption.evaluate(el=>el.classList.contains('glimpse')),false,'Tamil mode must not glimpse');
+  await page.close();
+ }
+
  // The couple's track. It must not be fetched until a guest asks for sound, it
  // must loop, it must survive switching invitations, and muting must stop it.
  {
@@ -70,7 +110,9 @@ try{
   const playing=await read();
   assert.ok(playing.loop,'the track must loop');
   assert.equal(await page.getByRole('button',{name:'Mute ambience'}).getAttribute('aria-pressed'),'true');
-  assert.equal(fetched.length,1,'exactly one audio file should be fetched');
+  // Media elements issue ranged GETs, and seeking adds more, so count distinct
+  // files rather than requests: only one codec should ever be downloaded.
+  assert.equal(new Set(fetched).size,1,'only one audio file should be downloaded');
 
   // Switching invitations must not restart or silence it.
   await page.getByRole('link',{name:'Temple',exact:true}).click();
@@ -88,7 +130,7 @@ try{
   await page.getByRole('button',{name:'Mute ambience'}).click();
   await page.waitForFunction(()=>window.__audio&&window.__audio.paused,null,{timeout:8000});
   assert.equal(await page.getByRole('button',{name:'Play ambience'}).getAttribute('aria-pressed'),'false');
-  assert.equal(fetched.length,1,'muting and unmuting must not refetch the audio');
+  assert.equal(new Set(fetched).size,1,'muting must not pull down a second audio file');
   await page.close();
  }
 
@@ -162,6 +204,6 @@ try{
  const unsupported=await browser.newPage();await unsupported.addInitScript(()=>{const original=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return type.includes('webgl')?null:original.call(this,type,...args);};});
  await unsupported.goto(`${base}/traditional`);await unsupported.waitForSelector('.temple-static');await unsupported.getByRole('button',{name:'View invitation'}).click();assert.equal(await unsupported.evaluate(()=>document.activeElement.id),'invitation');await unsupported.close();
  assert.deepEqual(errors,[]);
- await writeFile('artifacts/temple-validation.json',JSON.stringify({base,report,errors,checks:['seven chapters','reverse/fast scroll','sticky positioning','Tamil','audio toggle','skip/focus','offscreen pause','RSVP','replay','keyboard','resize','museum route reachable but unlisted','route re-entry','context loss','reduced motion','WebGL unavailable','classic /wedding route','classic route uses no WebGL','nav round trip','RSVP delivery on all three routes','RSVP failure surfaces an error','music loops, is lazy, and survives navigation','muting stops playback']},null,2));
+ await writeFile('artifacts/temple-validation.json',JSON.stringify({base,report,errors,checks:['seven chapters','reverse/fast scroll','sticky positioning','Tamil','audio toggle','skip/focus','offscreen pause','RSVP','replay','keyboard','resize','museum route reachable but unlisted','route re-entry','context loss','reduced motion','WebGL unavailable','classic /wedding route','classic route uses no WebGL','nav round trip','RSVP delivery on all three routes','RSVP failure surfaces an error','caption glimpses into Tamil and settles back','glimpse yields to hover','music loops, is lazy, and survives navigation','muting stops playback']},null,2));
  console.log(JSON.stringify(report,null,2));console.log('All temple journey browser checks passed.');
 }finally{await browser.close();}
